@@ -1,0 +1,1377 @@
+;------------------------------------------------
+;
+;
+;
+;
+;------------------------------------------------
+; a few statements etc..
+
+Statement titlefadein{speed}
+
+    r13.q=5   ;to 13
+    g13.q=5
+    b13.q=5
+
+    d13.q=(13-5)/speed
+
+For ll=0 To speed
+    VWait
+    RGB 13,r13,g13,b13
+    r13+d13:g13+d13:b13+d13
+Next
+End Statement
+
+Statement titlefadeout{speed}
+
+    r13.q=13   ;to 5
+    g13.q=13
+    b13.q=13
+
+    d13.q=(13-5)/speed
+
+For ll=0 To speed
+    VWait
+    RGB 13,r13,g13,b13
+    r13-d13:g13-d13:b13-d13
+Next
+End Statement
+
+
+;------------------------------------------------
+
+DEFTYPE .q
+
+DosBuffLen 10000
+
+;------------------------------------------------
+; initialise everything
+
+LoadShape 90,"Asmodeus/pointer.iff"
+GetaSprite 90,90
+
+LoadSprites 0,"Asmodeus/man.sprite"
+LoadShapes 2,"Asmodeus/baddie1.shp"
+
+LoadShapes 22,"Asmodeus/baddie2.shp"
+
+LoadShapes 42,"Asmodeus/baddie3.shp"
+
+LoadShapes 60,"Asmodeus/aliendie.shp"
+
+LoadShape 0,"Asmodeus/bullet.iff"
+LoadShape 1,"Asmodeus/albullet.iff"
+
+LoadSound 0,"Asmodeus/fire.sfx"
+LoadSound 1,"Asmodeus/youhit.sfx"
+LoadSound 2,"Asmodeus/explo.sfx"
+LoadSound 3,"Asmodeus/boom.sfx"
+
+LoadShapes 100,"Asmodeus/frontlayer.shp"
+
+;your bullets..
+maxbullets=2        ;0,1,2
+Dim ubx(maxbullets),uby(maxbullets),ubvx(maxbullets)
+
+;wave datastuff..
+Dim wavemx.w(50)        ;map x pos
+Dim wavetype.w(50)      ;alien type
+Dim wavesx.w(50)        ;start screen x
+Dim wavesy.w(50)        ;start screen y
+Dim wavemake.w(50,50)   ;make list
+Dim wavemove.w(50,300)  ;move list
+
+;alien stuff..
+maxaliens=10
+Dim alx(maxaliens)
+Dim aly(maxaliens)
+Dim alvx(maxaliens)
+Dim alvy(maxaliens)
+
+Dim alhit(maxaliens)
+Dim alflash(maxaliens)
+
+Dim alcnt(maxaliens)
+Dim alspd(maxaliens)
+Dim alfr(maxaliens)
+Dim allo(maxaliens)
+Dim alhi(maxaliens)
+Dim aldir(maxaliens)
+Dim alping(maxaliens)   ;animation
+
+Dim altype(maxaliens)
+Dim alwave(maxaliens)
+Dim almove(maxaliens)    ;wavemove element
+Dim alpause(maxaliens)
+Dim alfire(maxaliens)
+
+Dim hiname$(5),hiscore.l(5)
+hiname$(0)="Paul!":hiscore(0)=1000
+hiname$(1)=" Rod ":hiscore(1)=900
+hiname$(2)="Paul!":hiscore(2)=800
+hiname$(3)=" Rod ":hiscore(3)=700
+hiname$(4)="Paul!":hiscore(4)=600
+
+maxalbullets=2
+Dim albx(maxalbullets)
+Dim alby(maxalbullets)
+Dim albvx(maxalbullets)
+Dim albvy(maxalbullets)
+Dim alblf(maxalbullets)
+
+Dim map(1000,3)
+
+Dim px(100),py(100),pvx(100),pvy(100),pc(100)
+
+Dim ex(10),ey(10),efr(10),ecnt(10) ;for alien explosions..
+
+;load the map!!!
+h.l=Open_("Asmodeus/map1.bin",1004)
+For y=0 To 3
+    For x=0 To 1000
+        w.w=0
+        c.l=Read_(h,&w,2)
+        map(x,y)=w
+    Next
+Next
+c.l=Close_(h)
+
+;-------------------------------------------------------
+.FRONTEND
+
+level=1
+
+AMIGA
+Screen 0,0,0,640,400,4,$8004,"",0,1
+Window 0,0,0,640,400,$1900,"",0,1
+Menus Off:WPointer 90
+WCls 0
+
+Free BitMap 0
+Free BitMap 1
+Free BitMap 2
+Free BitMap 3
+Free BitMap 4
+
+Free Buffer 0
+Free Buffer 1
+
+For l=0 To 15
+    RGB l,0,0,0
+Next
+
+LoadFont 0,"helvetica.font",24
+Use IntuiFont 0
+WindowFont 0
+WJam 0
+
+WindowOutput 0
+WindowInput 0
+
+LoadScreen 0,"Asmodeus/Title.iff",0
+Use Palette 0
+
+startcred:
+Restore credittext
+
+RGB 13,5,5,5
+
+credits:
+
+For l=0 To 80
+    VWait
+    If Joyb(1)<>0 Then Goto exit
+Next
+
+Read f,y
+If f=-1 Then Goto drawhi
+
+If f=1
+    titlefadeout{15}
+    VWait
+    WBox 200,200,460,350,14
+    Goto credits
+EndIf
+
+Read  t$
+
+l=Len(t$)*13
+x=(640-l)/2
+
+WColour 15
+WLocate x+2,y+2
+Print t$
+WColour 13
+WLocate x,y
+Print t$
+
+titlefadein{15}
+For l=0 To 40
+    VWait
+    If Joyb(1)<>0 Then Goto exit
+Next
+
+Goto credits
+
+drawhi:
+RGB 13,5,5,5
+
+WColour 15
+WLocate 202,192
+Print "Todays Highest"
+WColour 13
+WLocate 200,190
+Print "Todays Highest"
+
+For l=0 To 4
+    t$=""
+    t$=Str$(l+1)+".  "      ;12 34
+    t$=t$+hiname$(l)+"  "   ;12345 67
+    t$=t$+Str$(hiscore(l))  ;1234567
+    ll=18*13
+    x=(640-ll)/2
+    WColour 15
+    WLocate x+2,232+(l*24)
+    Print t$
+    WColour 13
+    WLocate x,230+(l*24)
+    Print t$
+Next
+
+VWait 20
+
+titlefadein{40}
+For l=0 To 200
+    VWait
+    If Joyb(1)<>0 Then Goto exit
+Next
+titlefadeout{18}
+VWait
+WBox 200,190,450,360,14
+
+Goto startcred
+
+
+exit:
+Free Window 0
+Free Screen 0
+
+level=1
+
+Goto BEGIN
+
+; f,y,t$
+credittext:
+Data 0,260
+Data$ "Acid Software"
+
+Data 1,0
+
+Data 0,260
+Data$ "Proudly Presents"
+
+Data 1,0          ;fade out & clear it
+
+Data 0,260
+Data$ "A Blitz II Demo"
+Data 1,0
+
+Data 0,260
+Data$ "Written By"
+
+Data 1,0
+
+Data 0,260
+Data$ "Vision Software"
+Data 1,0
+
+Data 0,260
+Data$ "Programming By"
+Data 1,0
+
+Data 0,260
+Data$ "Paul Andrews"
+Data 1,0
+
+Data 0,260
+Data$ "Graphics By"
+Data 1,0
+
+Data 0,260
+Data$ "Rod Smith"
+Data 1,0
+
+Data 1,0
+
+Data -1,0
+;-------------------------------------------------------
+.BEGIN
+
+;front...
+BitMap 0,640+32+16,200,3
+BitMap 1,640+32+16,200,3
+
+;back...
+BitMap 2,640+32+16,200+32,3
+BitMap 3,640+32+16,200+32,3
+
+;panel..
+BitMap 4,320,10,1
+
+LoadBitMap 2,"Asmodeus/BackDrop1.iff"
+CopyBitMap 2,3
+
+LoadPalette 0,"Asmodeus/backgroundpal.iff",8
+LoadPalette 0,"Asmodeus/spritepal.iff",16
+LoadPalette 0,"Asmodeus/foregroundpal.iff",0
+
+LoadPalette 1,"Asmodeus/backgroundpal2.iff",8
+LoadPalette 1,"Asmodeus/spritepal.iff",16
+LoadPalette 1,"Asmodeus/foregroundpal.iff",0
+
+LoadPalette 2,"Asmodeus/backgroundpal3.iff",8
+LoadPalette 2,"Asmodeus/spritepal.iff",16
+LoadPalette 2,"Asmodeus/foregroundpal.iff",0
+
+
+BLITZ
+
+BitMapOutput 0
+
+Buffer 0,384*25     ;space for 25 32x32 8 colour blits
+Buffer 1,384*25
+
+BlitzKeys On
+BitMapInput
+
+Slice 0,32,320-16,192,$fffa,6,8,32,640+32+16,640+32+16
+
+Use Palette 0
+
+Slice 1,225,320,10,$fff0,1,0,2,320,320
+Show 4
+Use BitMap 4
+BitMapOutput 4
+RGB 0,0,0,0
+RGB 1,15,15,15
+Locate 2,0
+Print "SCORE:"
+Locate 20,0
+Print "LIVES:"
+
+score.l=0
+lives.w=5
+
+Locate 8,0:Print score
+Locate 26,0:Print lives
+
+Use Slice 0
+Use Palette 0
+
+ShowF 0,0,0
+ShowB 2,0,0
+Use BitMap 0
+BitMapOutput 0
+
+;------------------------------------------------
+.START
+
+ux=20       ;your posistion
+uy=100
+ufr=0
+ucnt=0
+udir=2
+score.l=0
+lives.w=5
+
+
+delay=0     ;frame speed
+
+uspd=4      ;your speed
+
+spd=1       ;scolling speed
+
+fscrnx=0    ;front screen pos..
+bscrnx=0    ;back screen pos..
+
+fnextdr=0   ;when do we draw the next row??
+bnextdr=0
+
+flastdr=-1
+blastdr=-1
+
+db=0        ;for double buffer..
+
+jdel=0      ;delay  between firing
+firerate=10 ;firing speed
+
+For l=0 To maxbullets:ubx(l)=-1:Next
+For l=0 To maxalbullets:albx(l)=-1:Next
+For l=0 To maxaliens:alx(l)=-1:Next
+
+For l=0 To 10:ex(l)=-1:Next
+
+fmx=20        ;front screen map x pos.. (0-19=inital pos)
+bmx=20        ;back screen map x pos.. (0-19=inital pos)
+
+Restore WaveData
+;get the entite levels data..
+wave=0
+
+GetWaveData:
+
+Read wavemx(wave):If wavemx(wave)=-1 Then Goto gotwave
+Read wavetype(wave)
+Read wavesx(wave)
+Read wavesy(wave)
+
+make=0
+getmakedata:
+Read wavemake(wave,make)
+
+If wavemake(wave,make)=-2 Then Goto gotmake
+make+1
+Goto getmakedata
+;
+gotmake:
+mve=0
+getmovedata:
+Read wavemove(wave,mve):If wavemove(wave,mve)=-3 Then Goto gotmove
+mve+1
+Goto getmovedata
+gotmove:
+
+wave+1
+Goto GetWaveData
+
+gotwave:
+wave=-1         ;current wave,-1=none
+nextwave=0      ;the one we're waiting for..
+
+
+DisplayOff
+
+;set up the front screen..
+
+yy=0
+xx=0
+For y=8 To 11
+    For x=0 To 19
+        qq=map(xx,yy)+100
+        Use BitMap 0
+        Block qq,x*16,y*16
+        Block qq,x*16+320,y*16
+        Use BitMap 1
+        Block qq,x*16,y*16
+        Block qq,x*16+320,y*16
+        xx+1
+    Next
+    xx=0:yy+1
+Next
+
+
+;set up the copper split..
+;N.B. colour 9 is colour 1 of the back playfeild..
+
+Restore SPLITS
+
+For y=0 To 199
+
+    Read r.w,g.w,b.w
+
+    ColSplit 10,r,g,b,y
+Next
+
+DisplayOn
+
+SetColl 4,6,2
+
+DoColl
+
+flicker=0
+
+Volume 15,64,64,64,64
+
+;------------------------------------------------
+.FRAME
+If Joyb(0)<>0 Then End
+VWait
+ShowF db,fscrnx+16,0,bscrnx+16
+ShowB 2+db,bscrnx+16,0,fscrnx+16
+
+If flicker/2=Int(flicker/2)
+    ShowSprite ufr,ux,uy-32,0
+    ShowSprite ufr+1,ux+16,uy-32,2
+Else
+    ShowSprite ufr,0,300,0
+    ShowSprite ufr+1,0,300,2
+EndIf
+
+If flicker>0 Then flicker-1
+
+BBlitMode CookieMode
+
+delay=0
+
+ucnt+1
+If ucnt=>2
+    ucnt=0
+    ufr+udir
+    If ufr>18 OR ufr<0 Then udir=-udir:ufr+(udir*2)
+EndIf
+
+db=1-db
+UnBuffer db
+
+;------------------------------------------------
+
+;------------------------------------------------
+DoColl
+
+If flicker=0
+    a=PColl(0)+PColl(1)+PColl(2)+PColl(3)
+    If a<>0
+        flicker=100
+        Sound 1,9
+        lives-1
+        If lives<0 Then Goto GAMEOVER
+        BitMapOutput 4
+        Use BitMap 4
+        Locate 26,0:Print lives
+        BitMapOutput db
+        Use BitMap db
+    EndIf
+EndIf
+
+;------------------------------------------------
+; scroll front bitmap..
+
+If flastdr<>-1
+    yy=0
+    For y=128 To 191 Step 16
+        qq=map(flastmx,yy)+100
+        Use BitMap db
+        Block qq,flastdr,y
+        Block qq,flastdr+320,y
+        yy+1
+    Next
+    flastdr=-1
+EndIf
+
+fscrnx=QWrap(fscrnx+spd,0,320)
+
+If fscrnx=>fnextdr AND Abs(fscrnx-fnextdr)<16
+    yy=0
+    For y=128 To 191 Step 16
+        qq=map(fmx,yy)+100
+        Use BitMap db
+        Block qq,fnextdr,y
+        Block qq,fnextdr+320,y
+        yy+1
+    Next
+
+    flastdr=fnextdr
+    flastmx=fmx
+
+    fnextdr=QWrap(fnextdr+16,0,320)
+
+    fmx+1
+
+EndIf
+
+
+;--------------------------------------
+; scroll back bitmap..
+
+bscrnx=QWrap(bscrnx+(spd/3),0,320)
+
+;--------------------------------------
+;update you..
+
+jx=Joyx(1)*uspd
+jy=Joyy(1)*uspd
+jf=Joyb(1)
+
+ux=QLimit(ux+jx,16,300)
+uy=QLimit(uy+jy,32,200-32)
+
+jdel-1:If jdel<0 Then jdel=0
+
+If jf=0 Then jdel=0
+
+If jf=1 AND jdel=0
+    For l=0 To 2
+        If ubx(l)=-1
+            ubx(l)=ux+32    ;N.B. these are offsets!!!
+            uby(l)=uy
+            ubvx(l)=8
+            jdel=firerate
+            Sound 0,2
+            Pop For
+            Goto gotone
+        EndIf
+    Next
+gotone:
+EndIf
+
+;------------------------------------------------
+;update your bullets..
+
+Use BitMap 2+db     ;all shapes are on bottom playfield!
+
+For l=0 To maxbullets
+    If ubx(l)<>-1
+        ubx(l)=ubx(l)+ubvx(l):ubvx(l)=ubvx(l)+.2
+        If ubx(l)>320 Then ubx(l)=-1:Goto done
+        BBlit db,0,ubx(l)+bscrnx,uby(l)
+    EndIf
+done:
+Next
+
+;check alien death..
+For l=0 To maxbullets
+    If ubx(l)<>-1
+        For l2=0 To maxaliens
+            If alx(l2)<>-1
+                If ubx(l)+10>alx(l2) AND ubx(l)<alx(l2)+32
+                    If uby(l)+18>aly(l2) AND uby(l)<aly(l2)+32
+                        alhit(l2)-1:ubx(l)=-1
+                        alflash(l2)=8
+                        Sound 2,4
+                        score=score+((altype(l2)+1)*50)
+                        If alhit(l2)=0
+                            For z=0 To 10
+                                If ex(z)=-1 Then Pop For:Goto gt
+                            Next
+                            Goto noex
+gt:                         ex(z)=alx(l2)-32:ey(z)=aly(l2)-16
+                            ecnt(z)=0:efr(z)=60
+noex:
+                            alx(l2)=-1
+                            Sound 2,8
+                            score=score+((altype(l2)+1)*50)
+                        EndIf
+                        BitMapOutput 4
+                        Use BitMap 4
+                        Locate 8,0:Print score
+                        BitMapOutput db
+                    EndIf
+                EndIf
+            EndIf
+        Next
+    EndIf
+Next
+
+;------------------------------------------------
+;update alien bullets..
+
+Use BitMap 2+db     ;all shapes are on bottom playfield!
+
+For l=0 To maxalbullets
+    If albx(l)<>-1
+        alblf(l)-1:If alblf(l)<0 Then albx(l)=-1:Goto done2
+        albx(l)+albvx(l)
+        alby(l)+albvy(l)
+        If albx(l)>320 OR albx(l)<0 Then albx(l)=-1:Goto done2
+        If alby(l)>200 OR alby(l)<0 Then albx(l)=-1:Goto done2
+        BBlit db,1,albx(l)+bscrnx,alby(l)
+    EndIf
+done2:
+Next
+;------------------------------------------------
+;update alien explosions..
+For l=0 To 10
+    If ex(l)<>-1
+        ecnt(l)+1
+        If ecnt(l)>2
+            ecnt(l)=0
+            efr(l)+1
+            If efr(l)>65 Then ex(l)=-1:Goto bbb
+        EndIf
+        BBlit db,efr(l),ex(l)+bscrnx,ey(l)
+    EndIf
+bbb:
+Next
+
+;------------------------------------------------
+; update wave..
+Use BitMap 2+db     ;all shapes are on bottom playfield!
+
+If wavemx(nextwave)=fmx     ;start a new wave!!
+    wave=nextwave
+    nextwave+1
+    make=0
+    makepause=0
+EndIf
+
+If wave=-1 Then Goto donewave
+
+If makepause>0 Then makepause-1:Goto nowave
+
+If wavemake(wave,make)<>-2   ;we havent finished making
+    If wavemake(wave,make)=-32768    ;add one
+        For l=0 To maxaliens
+            If alx(l)=-1 Then Pop For:Goto aa
+        Next
+        Goto noneleft
+aa:
+        alx(l)=wavesx(wave)
+        aly(l)=wavesy(wave)
+
+        altype(l)=wavetype(wave)
+
+        If altype(l)=0
+            Use Palette 0
+            allo(l)=2
+            alhi(l)=13
+            aldir(l)=1
+            alping(l)=1
+            alcnt(l)=0
+            alspd(l)=4
+            alfr(l)=2
+            alhit(l)=2
+        EndIf
+
+        If altype(l)=1
+            Use Palette 1
+            allo(l)=22
+            alhi(l)=33
+            aldir(l)=1
+            alping(l)=1
+            alcnt(l)=0
+            alspd(l)=4
+            alfr(l)=22
+            alhit(l)=4
+        EndIf
+
+        If altype(l)=2
+            Use Palette 2
+            allo(l)=42
+            alhi(l)=53
+            aldir(l)=1
+            alping(l)=1
+            alcnt(l)=0
+            alspd(l)=3
+            alfr(l)=42
+            alhit(l)=5
+        EndIf
+
+        almove(l)=0         ;index into wavemove
+        alvx(l)=0
+        alvy(l)=0
+        alpause(l)=0
+        alwave(l)=wave
+        alflash(l)=0
+noneleft:
+        make+1
+    Else
+        makepause=wavemake(wave,make)
+        make+1
+    EndIf
+EndIf
+
+nowave:
+
+For l=0 To maxaliens
+
+    If alx(l)<>-1
+
+;animate!!
+        alcnt(l)=alcnt(l)+1
+        If alcnt(l)=>alspd(l)
+            alcnt(l)=0
+            alfr(l)=alfr(l)+aldir(l)
+            If alfr(l)>alhi(l)
+                If alping(l)=1
+                    aldir(l)=-aldir(l)
+                    alfr(l)=alfr(l)+(aldir(l)*2)
+                Else
+                    alfr(l)=allo(l)
+                EndIf
+            EndIf
+
+            If alfr(l)<allo(l)
+                If alping(l)=1
+                    aldir(l)=-aldir(l)
+                    alfr(l)=alfr(l)+(aldir(l)*2)
+                Else
+                    alfr(l)=alhi(l)
+                EndIf
+            EndIf
+        EndIf
+
+;fire?
+        If alfire(l)>0 Then alfire(l)-1
+
+        If altype(l)/2=Int(altype(l)/2) AND alfire(l)=0
+            If Rnd>.5
+                For f=0 To maxalbullets
+                    If albx(f)=-1 Then Pop For:Goto go
+                Next
+                Goto nonea
+go:
+                bspd=100
+                If altype(l)=1 Then bspd=50
+                If altype(l)=2 Then bspd=25
+                albx(f)=alx(l)
+                alby(f)=aly(l)+16
+                albvx(f)=-(alx(l)-ux)/bspd
+                albvy(f)=-(aly(l)-uy)/bspd
+                alfire(l)=50
+                alblf(f)=500
+nonea:
+            EndIf
+        EndIf
+        If alpause(l)<>0
+            alpause(l)-1
+
+            alx(l)+alvx(l)
+            aly(l)+alvy(l)
+            ;update otherstuff
+            If alx(l)<0 Then alx(l)=-1:Goto aldead
+            If alx(l)>320 Then alx(l)=-1:Goto aldead
+            If aly(l)<0 Then alx(l)=-1:Goto aldead
+            If aly(l)>200 Then alx(l)=-1:Goto aldead
+
+            If alx(l)+bscrnx>0 AND alx(l)+bscrnx<640+32
+                If aly(l)>0 AND aly(l)<200
+                    If alflash(l)<>0
+                        BBlitMode SolidMode
+                        alflash(l)-1
+                    Else
+                        BBlitMode CookieMode
+                    EndIf
+                    BBlit db,alfr(l),alx(l)+bscrnx,aly(l)
+                EndIf
+            EndIf
+aldead:
+        Else
+again:
+            p=almove(l)
+            almove(l)+1
+            wav=alwave(l)
+            If wavemove(wav,p)=-3 Then Goto dm
+            If wavemove(wav,p)=-24576
+                alvx(l)=wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24575
+                alvy(l)=wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24574
+                alvx(l)=-wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24573
+                alvy(l)=-wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24572
+                alvx(l)+wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24571
+                alvx(l)-wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24570
+                alvy(l)+wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24569
+                alvy(l)-wavemove(wav,p+1):almove(l)+1
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24568
+                alvx(l)=-alvx(l)
+                Goto again
+            EndIf
+            If wavemove(wave,p)=-24567
+                alvy(l)=-alvy(l)
+                Goto again
+            EndIf
+
+            If wavemove(wav,p)=-24566
+                theta=wavemove(wav,p+1):almove(l)+1
+                theta=theta*(Pi/180)
+                alvx(l)=Sin(theta)*4
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24565
+                theta=wavemove(wav,p+1):almove(l)+1
+                theta=theta*(Pi/180)
+                alvx(l)=Cos(theta)*4
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24564
+                theta=wavemove(wav,p+1):almove(l)+1
+                theta=theta*(Pi/180)
+                alvy(l)=Sin(theta)*4
+                Goto again
+            EndIf
+            If wavemove(wav,p)=-24563
+                theta=wavemove(wav,p+1):almove(l)+1
+                theta=theta*(Pi/180)
+                alvy(l)=Cos(theta)*4
+                Goto again
+            EndIf
+
+            If wavemove(wav,p)=-24561
+                almove(l)=wavemove(wav,p+1)
+                Goto again
+            EndIf
+
+            If wavemove(wav,p)=-24560
+                alpause(l)=wavemove(wav,p+1):almove(l)+1
+                If alx(l)+bscrnx>0 AND alx(l)+bscrnx<640+32
+                    If aly(l)>0 AND aly(l)<200
+                        If alflash(l)<>0
+                            BBlitMode SolidMode
+                            alflash(l)-1
+                        Else
+                            BBlitMode CookieMode
+                        EndIf
+                        BBlit db,alfr(l),alx(l)+bscrnx,aly(l)
+                    EndIf
+                EndIf
+            EndIf
+dm:
+        EndIf
+    EndIf
+Next
+
+donewave:
+;------------------------------------------------
+
+Goto FRAME
+
+;------------------------------------------------
+.GAMEOVER
+
+ShowSprite ufr,0,300,0
+ShowSprite ufr,2,300,2
+
+VWait
+Use Slice 0
+ShowF db,fscrnx+16,0,bscrnx+16
+ShowB 2+db,bscrnx+16,0,fscrnx+16
+Use BitMap 2+db
+BitMapOutput 2+db
+expx=ux+16+bscrnx
+expy=uy
+
+c=Point(expx,expy)
+
+For l=0 To 100
+    px(l)=expx+(Rnd(11)-5)
+    py(l)=expy+(Rnd(11)-5)
+
+    pvx(l)=Rnd(5)-2
+    pvy(l)=-(Rnd(4)+2)
+
+    pc(l)=c
+
+Next
+
+jf=1        ;assume button is down..
+jd=200
+
+Sound 3,1
+For e=0 To 800
+    For l=0 To 100
+        Plot px(l),py(l),2
+        px(l)+pvx(l):py(l)+pvy(l)
+        If  py(l)>192 Then pvy(l)=-pvy(l)
+        If px(l)<bscrnx OR px(l)>bscrnx+320 Then pvx(l)=-pvx(l)
+        pvy(l)+.15
+        Plot px(l),py(l),1
+    Next
+
+    If jd>0 Then jd-1
+    If Joyb(1)=0 AND jd=0 Then jf=0
+    If Joyb(1)<>0 AND jf=0 Then Pop For:Goto endgo
+
+Next
+
+endgo:
+
+FadeOut 0,5
+
+Use BitMap db
+Cls
+Use BitMap 2+db
+Cls
+
+ShowF db,0,0,0
+ShowB 2+db,0,0,0
+
+For l=1 To 15:RGB l,15,0,0:Next
+
+RGB 1,15,15,15
+RGB 9,15,15,15
+Colour 1
+
+p=-1
+For l=0 To 4
+    If score>hiscore(l) Then  p=l:Pop For:Goto gg
+Next
+gg:
+If p=-1 Then Goto here
+
+For l=4 To p Step -1
+    hiscore(l+1)=hiscore(l)
+    hiname$(l+1)=hiname$(l)
+Next
+
+hiscore(p)=score
+Locate 11,8
+Print "A New High Score!!"
+Locate 12,10
+Print "Enter Your Name:"
+Locate 16,12
+hiname$(p)=Edit$(5)
+
+here:
+Cls
+;DisplayOff
+FreeSlices
+AMIGA
+Goto FRONTEND
+BLITZ
+;------------------------------------------------
+;------------------------------------------------
+
+;all data are words.
+;structure for 1 level..
+;
+;Level1:
+; data wavedata,wavedata,.....,-1
+
+;structure for wavedata (i.e. 1 wave of aliens)
+; data frontmapx  ;when you get here this wave will start
+; data alientype  ;type of alien this wave consists of
+; data startx,starty ;screen offset that they appear from
+
+;the following data tells us how we want to make them appear
+; data make,pause,..,endmake
+;  the code make will add an alien, pause is the number of
+;  frames to wait before adding another and endmake is a code
+;  signifying the end of that waves alien list.
+
+;the following data tells us how we want to move the aliens
+; data movecode,movedata,movedata,movecode,....,waveend
+;  movecode tells us what the following data words are,
+;  i.e. movecode could be set to `set x velocity' in which
+;  case the following data word is the new x velocity
+;  waveend is -1 signifying the end of that waves data, this
+;  is follwed by the next waves data, etc..
+
+
+;codes...
+; $ffff=end of level
+; $fffe=endmake
+; $fffd=waveend
+;
+; $8000=make
+
+; $a000=set +x velocity    1 data word -24576
+; $a001=set +y velocity    1 data word
+; $a002=set -x velocity    1 data word
+; $a003=set -y velocity    1 data word
+; $a004=add x velocity     1 data word
+; $a005=sub x velocity     1 data word
+; $a006=add y velocity     1 data word
+; $a007=sub y velocity     1 data word
+; $a008=change x direction no data word
+; $a009=change y direction no data word
+; $a00a=set x vel to sin   1 data word (degrees!)
+; $a00b=set x vel to cos   1 data word (degrees!)
+; $a00c=set y vel to sin   1 data word (degrees!)
+; $a00d=set y vel to cos   1 data word (degrees!)
+
+; $a00f=goto               1 data word (index #)
+
+; $a010=pause              1 data word -24560
+
+
+.WaveData
+Data.w 25,0,320,100
+Data.w $8000,50,$8000,50,$8000,50,$fffe
+Data.w $a002,3,$a00c,0,$a010,1,$a00c,10,$a010,2,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a00f,0,$fffd
+
+Data.w 38,0,320,60
+Data.w $8000,50,$8000,50,$8000,50,$fffe
+Data.w $a002,3,$a00c,0,$a010,1,$a00c,10,$a010,2,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a00f,0,$fffd
+
+Data.w 55,1,320,32
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 56,1,320,96
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 57,1,320,100
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 59,1,320,64
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 60,1,320,40
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 66,0,320,32
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a001,6,$a002,1,$a010,16,$a001,0,$a002,0,$a010,20,$a002,6,$a010,300,$fffd
+
+Data.w 75,0,320,64
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 77,0,320,100
+Data.w $8000,$fffe
+Data.w $a002,6,$a010,300,$fffd
+
+Data.w 83,0,320,40
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a001,6,$a002,2,$a010,10,$a001,0,$a002,0,$a010,20,$a002,6,$a010,300,$fffd
+
+Data.w 93,0,320,64
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a002,3,$a010,50,$a002,0
+Data.w $a002,3,$a010,10,$a002,0
+Data.w $a00c,0,$a00b,0,$a010,1,$a00c,10,$a00b,10,$a010,1,$a00c,20,$a00b,20,$a010,1
+Data.w $a00c,30,$a00b,30,$a010,1,$a00c,40,$a00b,40,$a010,1,$a00c,50,$a00b,50,$a010,1
+Data.w $a00c,60,$a00b,60,$a010,1,$a00c,70,$a00b,70,$a010,1,$a00c,80,$a00b,80,$a010,1
+Data.w $a00c,90,$a00b,90,$a010,1,$a00c,100,$a00b,100,$a010,1,$a00c,110,$a00b,110,$a010,1
+Data.w $a00c,120,$a00b,120,$a010,1,$a00c,130,$a00b,130,$a010,1,$a00c,140,$a00b,140,$a010,1
+Data.w $a00c,150,$a00b,150,$a010,1,$a00c,160,$a00b,160,$a010,1,$a00c,170,$a00b,170,$a010,1
+Data.w $a00c,180,$a00b,280,$a010,1,$a00c,190,$a00b,190,$a010,1,$a00c,200,$a00b,200,$a010,1
+Data.w $a00c,210,$a00b,210,$a010,1,$a00c,220,$a00b,200,$a010,1,$a00c,230,$a00b,230,$a010,1
+Data.w $a00c,240,$a00b,240,$a010,1,$a00c,250,$a00b,250,$a010,1,$a00c,260,$a00b,260,$a010,1
+Data.w $a00c,270,$a00b,270,$a010,1,$a00c,280,$a00b,280,$a010,1,$a00c,290,$a00b,290,$a010,1
+Data.w $a00c,300,$a00b,300,$a010,1,$a00c,310,$a00b,310,$a010,1,$a00c,320,$a00b,320,$a010,1
+Data.w $a00c,330,$a00b,330,$a010,1,$a00c,340,$a00b,240,$a010,1,$a00c,350,$a00b,350,$a010,1
+Data.w $a00f,6,$fffd
+
+
+Data.w 97,0,320,64
+Data.w $8000,$fffe
+Data.w $a002,3,$a00c,0,$a010,1,$a00c,10,$a010,2,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a00f,0,$fffd
+
+Data.w 98,0,320,64
+Data.w $8000,$fffe
+Data.w $a002,3,$a00c,0,$a010,1,$a00c,10,$a010,2,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a00f,0,$fffd
+
+
+Data.w 110,2,320,64
+Data.w $8000,$fffe
+Data.w $a002,6,$a001,2,$a010,30,$a003,2,$a010,30,$a00f,0,$fffd
+
+Data.w 114,2,320,96
+Data.w $8000,$fffe
+Data.w $a002,6,$a001,2,$a010,30,$a003,2,$a010,30,$a00f,0,$fffd
+
+Data.w 118,2,320,50
+Data.w $8000,$fffe
+Data.w $a002,6,$a001,2,$a010,30,$a003,2,$a010,30,$a00f,0,$fffd
+
+Data.w 122,2,320,100
+Data.w $8000,$fffe
+Data.w $a002,6,$a001,2,$a010,30,$a003,2,$a010,30,$a00f,0,$fffd
+
+Data.w 124,2,320,70
+Data.w $8000,$fffe
+Data.w $a002,6,$a001,2,$a010,30,$a003,2,$a010,30,$a00f,0,$fffd
+
+Data.w 128,2,320,40
+Data.w $8000,$fffe
+Data.w $a002,6,$a001,2,$a010,30,$a003,2,$a010,30,$a00f,0,$fffd
+
+Data.w 136,1,320,32
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a001,8,$a002,1,$a010,16,$a001,0,$a002,0,$a010,20,$a002,6,$a010,300,$fffd
+
+Data.w 150,2,320,32
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a001,7,$a002,1,$a010,16,$a001,0,$a002,0,$a010,20,$a002,6,$a010,300,$fffd
+
+Data.w 160,1,320,64
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a002,2
+Data.w $a001,8,$a010,5,$a003,8,$a010,5
+Data.w $a00f,0,$fffd
+
+Data.w 170,0,320,70
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a002,2
+Data.w $a001,8,$a010,5,$a003,8,$a010,5
+Data.w $a00f,0,$fffd
+
+Data.w 180,2,320,90
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a002,2
+Data.w $a001,8,$a010,5,$a003,8,$a010,5
+Data.w $a00f,0,$fffd
+
+Data.w 190,1,320,70
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a002,6,$a00c,0,$a010,1,$a00c,10,$a010,1,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a00f,0,$fffd
+
+Data.w 200,2,320,70
+Data.w $8000,25,$8000,25,$8000,25,$8000,25,$fffe
+Data.w $a002,2,$a00c,0,$a010,1,$a00c,10,$a010,1,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a005,1,$a00f,2,$fffd
+
+
+Data.w 210,0,320,80
+Data.w $8000,$fffe
+Data.w $a002,1
+Data.w $a010,10,$a005,1,$a00f,2,$fffd
+
+Data.w 213,0,320,40
+Data.w $8000,$fffe
+Data.w $a002,1
+Data.w $a010,10,$a005,1,$a00f,2,$fffd
+
+Data.w 216,0,320,90
+Data.w $8000,$fffe
+Data.w $a002,1
+Data.w $a010,10,$a005,1,$a00f,2,$fffd
+
+Data.w 218,0,320,50
+Data.w $8000,$fffe
+Data.w $a002,1
+Data.w $a010,10,$a005,1,$a00f,2,$fffd
+
+Data.w 219,0,320,100
+Data.w $8000,$fffe
+Data.w $a002,1
+Data.w $a010,10,$a005,1,$a00f,2,$fffd
+
+Data.w  $ffff
+
+
+;**********************************************************************
+; here are some useful move data thingies..
+
+
+;sin wave
+Data.w $a002,2,$a00c,0,$a010,1,$a00c,10,$a010,1,$a00c,20,$a010,1
+Data.w $a00c,30,$a010,1,$a00c,40,$a010,1,$a00c,50,$a010,1
+Data.w $a00c,60,$a010,1,$a00c,70,$a010,1,$a00c,80,$a010,1
+Data.w $a00c,90,$a010,1,$a00c,100,$a010,1,$a00c,110,$a010,1
+Data.w $a00c,120,$a010,1,$a00c,130,$a010,1,$a00c,140,$a010,1
+Data.w $a00c,150,$a010,1,$a00c,160,$a010,1,$a00c,170,$a010,1
+Data.w $a00c,180,$a010,1,$a00c,190,$a010,1,$a00c,200,$a010,1
+Data.w $a00c,210,$a010,1,$a00c,220,$a010,1,$a00c,230,$a010,1
+Data.w $a00c,240,$a010,1,$a00c,250,$a010,1,$a00c,260,$a010,1
+Data.w $a00c,270,$a010,1,$a00c,280,$a010,1,$a00c,290,$a010,1
+Data.w $a00c,300,$a010,1,$a00c,310,$a010,1,$a00c,320,$a010,1
+Data.w $a00c,330,$a010,1,$a00c,340,$a010,1,$a00c,350,$a010,1
+Data.w $a00f,0,$fffd
+
+;**********************************************************************
+; here are the copper splits..
+SPLITS:
+
+Data.w 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+Data.w 0,0,0,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1
+Data.w 0,0,1,0,0,2,0,0,2,0,0,2,0,0,2,0,0,2,0,0,2,0,0,2
+Data.w 0,0,2,0,0,3,0,0,3,0,0,3,0,0,3,0,0,3,0,0,3,0,0,3
+Data.w 0,0,3,0,0,4,0,0,4,0,0,4,0,0,4,0,0,4,0,0,4,0,0,4
+Data.w 0,0,4,0,0,5,0,0,5,0,0,5,0,0,5,0,0,5,0,0,5,0,0,5
+Data.w 0,0,5,0,0,5,0,0,5,0,0,5,0,0,5,0,0,5,0,0,5,1,0,5
+Data.w 1,0,5,1,0,5,1,0,5,1,0,5,1,0,5,1,0,5,1,0,5,2,0,5
+Data.w 2,0,5,2,0,5,2,0,6,2,0,6,2,0,6,2,0,6,2,0,6,3,0,6
+Data.w 3,0,6,3,0,6,3,0,6,3,0,6,3,0,6,3,0,6,3,0,6,3,0,6
+Data.w 4,0,6,4,0,6,4,0,6,4,0,6,4,0,6,4,0,7,4,0,7,4,0,7
+Data.w 5,0,7,5,0,7,5,0,7,5,0,7,5,0,7,5,0,7,5,0,7,5,0,7
+Data.w 6,0,7,6,0,7,6,0,7,6,0,7,6,0,7,6,0,7,6,0,7,6,0,7
+Data.w 6,0,7,6,0,7,6,0,7,6,0,7,6,0,7,6,0,7,6,0,7,6,0,7
+Data.w 6,0,7,7,0,7,7,0,8,7,0,8,7,0,8,7,0,8,7,0,8,7,0,8
+Data.w 7,0,8,7,0,8,7,0,8,8,0,8,8,0,8,8,0,9,8,0,9,8,0,9
+Data.w 8,0,9,8,0,9,8,0,9,8,0,9,8,0,9,9,0,9,9,0,9,9,0,9
+Data.w 9,0,10,9,0,10,9,0,10,9,0,10,9,0,10,9,0,10,9,0,10,10,0,10
+Data.w 10,0,10,10,0,10,10,0,10,10,0,11,10,0,11,10,0,11,10,0,11,10,0,11
+Data.w 10,0,11,11,0,11,11,0,11,11,0,11,11,0,11,11,0,11,11,0,12,11,0,12
+Data.w 11,0,12,11,0,12,12,0,12,12,0,12,12,0,12,12,0,12,12,0,12,12,0,12
+Data.w 12,0,12,12,0,13,12,0,13,12,0,13,13,0,13,13,0,13,13,0,13,13,0,13
+Data.w 13,0,13,13,0,13,13,0,13,13,0,13,13,0,14,13,0,14,14,0,14,14,0,14
+Data.w 14,0,14,14,0,14,14,0,14,14,0,14,14,0,14,14,0,14,14,0,14,14,0,15
+Data.w 15,0,15,15,0,15,15,0,15,15,0,15,15,0,15,15,0,15,15,0,15,15,0,15
+Data.w 15,0,15
