@@ -1,0 +1,1045 @@
+
+NEWTYPE .obj
+
+here.w
+x.q
+y.q
+vx.q
+vy.q
+
+typ.w   ;pop-up,thrower,faller,walker
+anim.w  ;what sort of this type (i.e. which zombie)
+
+time.w  ;how long has it been on?
+
+fr.q
+hi.w
+lo.w
+dir.q
+ping.w
+cnt.w
+spd.w
+
+hits.q  ;max hp
+dam.q   ;curr damage (if dam=hits its dead)
+
+End NEWTYPE
+
+popup.w=0
+walker.w=1
+faller.w=2
+thrower.w=3
+
+ammunition.w=4
+grenades.w=5
+
+bomb.w=6
+
+Dim meltv.q(319)
+
+Dim objects.obj(10)
+
+Dim rr.q(32),gg.q(32),bb.q(32)
+Dim rrv.q(32),ggv.q(32),bbv.q(32)
+
+
+; animxx(damage%,anim)  (5,xx)=die!!
+Dim animlo(5,20),animhi(5,20),animspd(5,20),animdir(5,20)
+Dim animping(5,20),animhit(5,20) ;frame to show when hit..
+
+For zom=0 To 4      ;10 or 20
+
+    For d=0 To 5
+        Read animlo(d,zom),animhi(d,zom),animspd(d,zom)
+        Read animdir(d,zom),animping(d,zom),animhit(d,zom)
+    Next
+Next
+
+;   lo,hi,spd,dir,ping,hit
+;zombie anim 0, popup(simon)
+Data 13,14,4,1,0,4            ;no damage
+Data 13,14,4,1,0,4            ;slight damage
+Data 15,16,4,1,0,4            ;bit more damage
+Data 17,18,4,1,0,4            ;half damage
+Data 17,18,4,1,0,4            ;3/4 damage
+Data 19,21,2,1,0,0            ;dying
+
+;zombie anim 1, popup(mark)
+Data 8,8,4,0,0,4
+Data 8,8,4,0,0,4
+Data 9,9,4,0,0,4
+Data 10,10,4,0,0,4
+Data 10,10,4,0,0,4
+Data 11,12,2,1,0,4
+
+;zombie anim 2, popup(al)   file 2
+Data 30,31,4,1,0,4
+Data 30,31,4,1,0,4
+Data 32,33,4,1,0,4
+Data 34,35,4,1,0,4
+Data 34,35,4,1,0,4
+Data 36,37,2,1,0,4
+
+
+;zombie anim 3, walker(me)  file 2
+Data 22,23,4,1,0,4
+Data 22,23,4,1,0,4
+Data 24,25,4,1,0,4
+Data 26,27,4,1,0,4
+Data 26,27,4,1,0,4
+Data 28,29,2,1,0,4
+
+
+;zombie anim 4, thrower file 1
+Data 0,3,4,1,0,4
+Data 0,3,4,1,0,4
+Data 4,4,2,1,0,4
+Data 5,5,2,1,0,4
+Data 5,5,2,1,0,4
+Data 6,7,2,1,0,4
+
+Dim bloodx(5),bloody(5),bloodfr(5),bloodcnt(5)
+
+;*********************************************************
+.INIT
+BitMap 0,320+16,210,5
+BitMap 1,320+16,200,5
+
+BitMap 2,320+16,200,5  ;for unquing
+
+
+Queue 0,30
+Queue 1,30
+
+
+LoadShape 0,"zombies/sight.iff"
+GetaSprite 0,0
+
+LoadShapes 190,"zombies/score.shp"   ;1 bit plane!!!
+LoadShape 189,"zombies/hole.iff"
+LoadShape 187,"zombies/bullet.iff"
+LoadShape 188,"zombies/grenade.iff"
+
+LoadShapes 0,"zombies/zombies1.shp"  ;0-21
+LoadShapes 22,"zombies/zombies2.shp" ;22-37
+
+LoadShapes 180,"zombies/blood.shp"  ;180,181,182,183,184
+LoadShape 175,"zombies/AmmoBox.iff"  ;175
+LoadShape 176,"zombies/GrenadeBox.iff"  ;176
+
+LoadShapes 170,"zombies/Thrown.shp"   ;170,171,172,173
+
+
+LoadSound 0,"zombies/gun.sfx"
+LoadSound 1,"zombies/boom.sfx"
+
+LoadSound 2,"zombies/appear1.sfx"
+LoadSound 3,"zombies/appear2.sfx"
+LoadSound 4,"zombies/appear3.sfx"
+LoadSound 5,"zombies/appear4.sfx"
+LoadSound 6,"zombies/appear5.sfx"
+LoadSound 7,"zombies/appear6.sfx"    ;2-7=appearing...
+
+LoadSound 8,"zombies/splat1.sfx"
+LoadSound 9,"zombies/splat2.sfx"
+LoadSound 10,"zombies/splat3.sfx"    ;8-10 splat...
+
+LoadSound 11,"zombies/die1.sfx"
+LoadSound 12,"zombies/die2.sfx"
+LoadSound 13,"zombies/die3.sfx"    ;11-13 die...
+
+LoadSound 14,"zombies/ouch1.sfx"
+LoadSound 15,"zombies/ouch2.sfx"
+LoadSound 16,"zombies/ouch3.sfx"
+LoadSound 17,"zombies/ouch4.sfx"
+LoadSound 18,"zombies/ouch5.sfx" ;14-18 ouch...
+
+LoadBlitzFont 0,"zombie.font"
+
+;*********************************************************
+.BEGIN
+BLITZ
+
+Volume 15,64,64,64,64
+
+;-----------------------------------------------
+Statement melt{bm}
+Shared meltv()
+
+    For l=0 To 319:meltv(l)=0:Next
+
+    CopyBitMap bm,1-bm
+
+    For t=0 To 50
+        VWait
+        Show bm
+        bm=1-bm
+        Use BitMap bm
+
+        For x=0 To 319 Step 5
+            If Joyb(0)<>0 Then Pop For:Pop For:Goto qwe
+            Scroll x,0,5,200-meltv(x),x,meltv(x)
+
+            k.q=0
+            If x<=160
+                k=(x/300)+Rnd
+            Else
+                k=((160-(x-160))/300)+Rnd
+            EndIf
+
+            meltv(x)=meltv(x)+k
+        Next
+    Next
+qwe:
+
+End Statement
+;-----------------------------------------------
+Statement pscore{a.l}
+Shared db
+
+    Format "0000000"
+    a$=Str$(a)
+
+    xx=33
+    yy=2
+
+    For l=1 To 7
+        a=Asc(Mid$(a$,l,1))-Asc("0")+190
+        QBlit db,a,xx,yy,0
+        If a<>191
+            xx=xx+12
+        Else
+            xx=xx+7
+        EndIf
+    Next
+
+    Format ""
+End Statement
+;-----------------------------------------------
+Statement bloodfade{speed}
+Shared rr(),gg(),bb(),rrv(),ggv(),bbv()
+
+    For l=1 To 31
+        rr(l)=Red(l)
+        gg(l)=Green(l)
+        bb(l)=Blue(l)
+
+        rrv(l)=(15-rr(l))/speed
+        ggv(l)=(0-gg(l))/speed
+        bbv(l)=(0-bb(l))/speed
+    Next
+
+    For t=1 To speed
+        VWait
+        For l=1 To 31
+            RGB l,rr(l),gg(l),bb(l)
+            rr(l)+rrv(l)
+            gg(l)+ggv(l)
+            bb(l)+bbv(l)
+        Next
+    Next
+
+    VWait 2
+
+    For t=1 To speed
+        VWait
+        For l=1 To 31
+            RGB l,rr(l),gg(l),bb(l)
+            rr(l)-rrv(l)
+            gg(l)-ggv(l)
+            bb(l)-bbv(l)
+        Next
+    Next
+
+    Use Palette 0
+
+End Statement
+;-----------------------------------------------
+Slice 0,40,320,200,$fff0,5,8,32,320+16,320+16
+Show 0,0,0
+
+RGB 0,0,0,0
+
+Mouse On
+
+BitMapInput
+BitMapOutput 0
+BlitzKeys On
+Use BlitzFont 0
+
+SetInt 5
+    delay+1
+    ShowSprite 0,mx,my,2
+    mx=QLimit(mx+MouseXSpeed,0,304)
+    my=QLimit(my+MouseYSpeed,16,200-16-4)
+End SetInt
+;*********************************************************
+.FRONTEND
+DisplayOff
+QAMIGA
+LoadBitMap 0,"zombies/titlescreen.iff",0
+BLITZ
+
+Use BitMap 1
+Cls
+
+CopyBitMap 0,2
+
+Use Slice 0
+Show 0,0,0
+Use Palette 0
+DisplayOn
+
+stcr:
+d$=""
+Restore credits
+
+feloop:
+VWait
+Read d$
+If d$="XXX" Then Goto stcr
+Use BitMap 1
+BitMapOutput 1
+Locate 0,0
+Print d$
+GetaShape 180,0,0,28*8,8
+
+Use BitMap 0
+BitMapOutput 0
+
+For yy=200 To 72 Step -4
+    VWait
+    UnQueue 0,2
+    QBlit 0,180,6*8,yy
+    If Joyb(0)<>0 Then Pop For:Goto STARTGAME
+Next
+
+For d=0 To 100
+    VWait
+    If Joyb(0)<>0 Then Goto  STARTGAME
+Next
+
+For yy=72 To 200 Step 4
+    VWait
+    UnQueue 0,2
+    QBlit 0,180,6*8,yy
+    If Joyb(0)<>0 Then Pop For:Goto STARTGAME
+Next
+UnQueue 0,2
+
+For d=0 To 50
+    VWait
+    If Joyb(0)<>0 Then Goto  STARTGAME
+Next
+
+Goto feloop
+
+credits:
+Data.s "WELCOME TO ZOMBIE APOCALYPSE"
+Data.s "  WRITTEN IN BLITZ BASIC 2  "
+Data.s "PROGRAMMING BY PAUL ANDREWS "
+Data.s "  GRAPHICS BY RODNEY SMITH  "
+
+Data.s "                            "
+
+Data.s "SHOOT THE MUTANT ZOMBIES...."
+Data.s "COLLECT AMMO AND GRENADES..."
+
+Data.s "                            "
+
+Data.s "XXX"
+;*********************************************************
+.STARTGAME
+
+score.l=0
+ammo.w=199
+grenade.w=3
+level.w=1
+
+energy.q=10     ;max=10
+
+lf$="poopoo"
+
+;*********************************************************
+.STARTLEVEL
+
+;load the backdrop...
+
+f$="zombies/BackGround"+Str$((Int(level/4)MOD3)+1)+".iff"
+
+If f$<>lf$
+    QAMIGA
+    LoadBitMap 2,f$,0
+    BLITZ
+    lf$=f$
+EndIf
+
+DisplayOff
+CopyBitMap 2,0
+CopyBitMap 2,1
+Show 1,0,0
+db=0
+Use Palette 0
+DisplayOn
+Use BlitzFont 0
+
+strikes.w=0     ;how many times we've hit a zombie!
+
+k3m=0
+
+messcnt.q=0
+
+zadd.w=0        ;delay between adding zombies
+
+zkilled.w=0     ;number of zombies killed..
+
+fired.q=0       ;number of bullets fired..
+hit.q=0         ;number of good shots
+
+mx=160
+my=100
+
+db=0
+delay=0
+
+shake=0
+shcnt=0
+
+fdel=0
+gdel=0
+amflick=0
+
+For l=0 To 10
+    objects(l)\here=0
+Next
+
+For l=0 To 5
+    bloodx(l)=-1
+Next
+
+Use BitMap 2
+BitMapOutput 2
+Boxf 270,4,270+40,10,0 ;energy...
+Box 268,2,270+42,12,1
+Colour1,19:Locate 7,24:Print "                          "
+
+Use BitMap 1
+BitMapOutput 1
+Boxf 270,4,270+40,10,0 ;energy...
+Box 268,2,270+42,12,1
+Colour1,19:Locate 7,24:Print "                          "
+
+Use BitMap 0
+BitMapOutput 0
+Boxf 270,4,270+40,10,0 ;energy...
+Box 268,2,270+42,12,1
+Colour1,19:Locate 7,24:Print "                          "
+Use BlitzFont 0
+;*********************************************************
+.FRAME
+VWait
+If delay<2 Then VWait
+delay=0
+Show db,0,shake
+db=1-db
+Use BitMap db
+UnQueue db,2
+
+;Locate 0,11
+;Print 1040152-AvailMem_(2)
+
+If zkilled=>(level+3)*3
+    Goto FINISHLEVEL
+EndIf
+
+
+;-----------------------------------------------
+;draw zombies...
+For l=0 To 10
+    If objects(l)\here<>0
+        objects(l)\cnt=objects(l)\cnt+1
+        If objects(l)\cnt=>objects(l)\spd
+            objects(l)\cnt=0
+            objects(l)\fr=objects(l)\fr+objects(l)\dir
+
+            If objects(l)\dir>0
+                If objects(l)\fr>objects(l)\hi
+                    If objects(l)\ping=1
+                        objects(l)\dir=-1
+                        objects(l)\fr=objects(l)\fr-1
+                    Else
+                        objects(l)\fr=objects(l)\lo
+                    EndIf
+                EndIf
+            EndIf
+
+            If objects(l)\dir<0
+                If objects(l)\fr<objects(l)\lo
+                    If objects(l)\ping=1
+                        objects(l)\dir=1
+                        objects(l)\fr=objects(l)\fr+1
+                    Else
+                        objects(l)\fr=objects(l)\hi
+                    EndIf
+                EndIf
+            EndIf
+        EndIf
+
+        objects(l)\x=objects(l)\x+objects(l)\vx
+        objects(l)\y=objects(l)\y+objects(l)\vy
+
+        If objects(l)\typ<ammunition AND objects(l)\x>319-48 Then objects(l)\here=0:Goto rty
+
+
+        If objects(l)\x>0 AND objects(l)\x<300
+            If objects(l)\y>0 AND objects(l)\y<187
+                QBlit db,objects(l)\fr,objects(l)\x,objects(l)\y
+            EndIf
+        EndIf
+rty:
+    EndIf
+Next
+
+
+;-----------------------------------------------
+;draw blood splats..
+
+For l=0 To 5
+    If bloodx(l)<>-1
+        bloodcnt(l)+1
+        If bloodcnt(l)=>1
+            bloodcnt(l)=0
+            bloodfr(l)+1
+            If bloodfr(l)>184 Then bloodx(l)=-1:Goto nob
+        EndIf
+
+        QBlit db,bloodfr(l),bloodx(l),bloody(l)
+nob:
+    EndIf
+Next
+
+;-----------------------------------------------
+;draw score,grenades etc..
+pscore{score}
+For l=1 To grenade
+    QBlit db,188,(l-1)*14,183
+Next
+amflick-1:If amflick<1 Then amflick=5
+If ammo>1
+    For l=Int(ammo/50)+1 To 1 Step -1
+        If ammo>49 OR amflick=>4
+            QBlit db,187,312-((l-1)*6),189
+        EndIf
+    Next
+EndIf
+
+If zkilled=(level+3)*3-3 AND k3m=0
+    k3m=1
+    Colour1,19
+    Use BitMap 2
+    Use BlitzFont 0
+    Locate 7,24:NPrint "   KILL 3 MORE ZOMBIES!":messcnt=30
+    Use BitMap db
+    Use BlitzFont 0
+    Locate 7,24:NPrint "   KILL 3 MORE ZOMBIES!"
+EndIf
+
+If ammo=40
+    Colour1,19
+    Use BitMap 2
+    Use BlitzFont 0
+    Locate 7,24:Print "     LOW AMMUNITION!!":messcnt=30
+    Use BitMap db
+    Use BlitzFont 0
+    Locate 7,24:Print "     LOW AMMUNITION!!"
+EndIf
+
+If messcnt>0 Then messcnt-1
+If messcnt=0
+    Colour1,19
+    Use BitMap 2
+    Locate 7,24:Print "                          "
+    Use BitMap db
+    Locate 7,24:Print "                          "
+    messcnt=-1
+EndIf
+
+Boxf 270,4,270+40,10,0
+Boxf 270,4,270+(energy*4),10,1
+
+;-----------------------------------------------
+;do mouse stuff..
+If fdel>0 Then fdel-1
+
+If Joyb(0)=1
+    If ammo>0
+        If fdel=0
+            fired+1
+            Sound 0,3
+            fdel=2:If ammo<20 Then fdel=5+Int(Rnd(10))
+            If ammo=1 Then fdel=70
+            mx=mx+((Rnd(2)-1)*2)
+            my=my+((Rnd(2)-1)*2)
+            If ammo>1 Then ammo-1
+
+            ;check zombies..(goto ok if hit one) (0,16-19=wall,4,7,20,28,29,30=sky)
+
+            For l=0 To 10
+                If objects(l)\here<>0
+                    If objects(l)\typ<ammunition
+                        damper.q=QLimit((objects(l)\dam/objects(l)\hits)*6,0,5)
+                        If damper=5 Then Goto invinc
+
+                        If mx+7>objects(l)\x+8 AND mx+7<objects(l)\x+40
+                            If my+7>objects(l)\y+8 AND my+7<objects(l)\y+56
+                                objects(l)\dam+1:strikes+1:score+((objects(l)\typ+1)*25)
+                                hit+1
+                                ss=Int(Rnd(3))+8
+                                Sound ss,8
+                                ss=Int(Rnd(5))+14
+                                Sound ss,4
+                                For lb=0 To 5
+                                    If bloodx(lb)=-1
+                                        bloodx(lb)=mx:bloody(lb)=my:bloodfr(lb)=180:bloodcnt(lb)=0
+                                        Pop For:Goto poo
+                                    EndIf
+                                Next
+    poo:
+;;;;;;;;;;;;;;;                 Pop For:Goto ok
+                            EndIf
+    invinc:
+                        EndIf
+                    Else    ; its either ammo or grenades or a bomb!!
+                        If mx+7>objects(l)\x-8 AND mx+7<objects(l)\x+18
+                            If my+7>objects(l)\y-8 AND my+7<objects(l)\y+18
+                                If objects(l)\typ=bomb Then objects(l)\here=0:score+50:Pop For:Goto ok
+                                If objects(l)\hits=0
+                                    objects(l)\hits=1
+                                    If objects(l)\typ=ammunition Then ammo=QLimit(ammo+40,0,199):score+10
+                                    If objects(l)\typ=grenades Then grenade=QLimit(grenade+1,0,3):score+10
+                                    objects(l)\vy=-5:objects(l)\y-2
+                                    objects(l)\vx=Sgn(objects(l)\x-160)*6
+                                    hit+1
+;;;;;;;;;;;;;;;                        Pop For:Goto ok
+                                EndIf
+                            EndIf
+                        EndIf
+                    EndIf
+
+                EndIf
+            Next
+
+nozom:
+            If my+8>165
+                Use BitMap 0
+                Blit 189,mx+6,my+6
+                Use BitMap 1
+                Blit 189,mx+6,my+6
+                Use BitMap 2
+                Blit 189,mx+6,my+6
+                Use BitMap db
+            EndIf
+ok:
+        EndIf
+    EndIf
+EndIf
+
+If gdel>0 Then gdel-1
+
+If Joyb(0)=2
+    If grenade>0 AND gdel=0
+        grenade-1
+        gdel=20
+        shcnt=18
+        Sound 1,4
+    EndIf
+EndIf
+
+If shcnt>0
+    killg.w=0
+    For l=0 To 10
+        If objects(l)\here<>0
+            If objects(l)\typ<ammunition
+                killg.w+1
+                objects(l)\dam+1:strikes+1:score+((objects(l)\typ+1)*30)
+            EndIf
+            If objects(l)\typ=bomb
+                objects(l)\here=0:strikes+1:score+35
+            EndIf
+
+        EndIf
+    Next
+    If killg=>4 Then score=score+((2^killg)*50):Colour1,19:Locate 7,24:Print "ZOMBIE INTERSECTION BONUS!":messcnt=20
+    shcnt-1
+    shake=(Rnd(2)-1)*4
+    If shcnt/2=Int(shcnt/2) Then RGB 30,14,8,0 Else RGB 30,4,0,0
+Else
+    RGB 30,4,0,0
+    shake=0
+EndIf
+
+
+;-----------------------------------------------
+;add zombie ????
+
+zadd+1
+If zadd=>(20-level)*2
+    If Rnd>.4
+        zadd=0
+        f.w=-1
+        For l=0 To 10
+            If objects(l)\here=0
+                f=l:Pop For:Goto gotz
+            EndIf
+        Next
+gotz:
+        If f>-1     ;we got one, add it!!
+            objects(l)\here=1
+            objects(l)\typ=(Int(Rnd(level+1)) MOD ammunition)
+
+            ss=(Int(Rnd(6))+2)
+            Sound ss,4
+
+            If objects(l)\typ=popup OR objects(l)\typ=faller
+                objects(l)\typ=popup
+                ani=(Int(Rnd(3)) MOD 3)
+                objects(l)\anim=ani
+                objects(l)\x=Int(Rnd(270))
+                objects(l)\y=101
+                objects(l)\vx=0
+                objects(l)\vy=0
+                objects(l)\time=0
+                objects(l)\hits=3+level
+                objects(l)\dam=0
+                objects(l)\fr=animlo(0,ani)
+                objects(l)\hi=animhi(0,ani)
+                objects(l)\lo=animlo(0,ani)
+                objects(l)\dir=animdir(0,ani)
+                objects(l)\ping=animping(0,ani)
+                objects(l)\cnt=Rnd(2)
+                objects(l)\spd=animspd(0,ani)
+            EndIf
+
+            If objects(l)\typ=walker
+                objects(l)\anim=3:ani=3
+                objects(l)\x=0
+                objects(l)\y=101
+                objects(l)\vx=3+Rnd(4)
+                objects(l)\vy=0
+                objects(l)\time=0
+                objects(l)\hits=4+level
+                objects(l)\dam=0
+                objects(l)\fr=animlo(0,ani)
+                objects(l)\hi=animhi(0,ani)
+                objects(l)\lo=animlo(0,ani)
+                objects(l)\dir=animdir(0,ani)
+                objects(l)\ping=animping(0,ani)
+                objects(l)\cnt=Rnd(2)
+                objects(l)\spd=animspd(0,ani)
+            EndIf
+
+            If objects(l)\typ=thrower
+                ani=4
+                objects(l)\anim=ani
+                objects(l)\x=Int(Rnd(200))+35
+                objects(l)\y=101
+                objects(l)\vx=0
+                objects(l)\vy=0
+                objects(l)\time=0
+                objects(l)\hits=6+level
+                objects(l)\dam=0
+                objects(l)\fr=animlo(0,ani)
+                objects(l)\hi=animhi(0,ani)
+                objects(l)\lo=animlo(0,ani)
+                objects(l)\dir=animdir(0,ani)
+                objects(l)\ping=0
+                objects(l)\cnt=0
+                objects(l)\spd=QLimit(animspd(0,ani)-Int(level/10),1,4)
+            EndIf
+
+        EndIf
+    EndIf
+EndIf
+
+
+;----------------------------------------------
+;drop ammo/grenade box??
+
+If dropcnt>0 Then dropcnt-1
+
+If dropcnt=0
+    If strikes>((ammo/5)+Int(Rnd(10)))      ;AND Rnd>.15
+        dropcnt=Int(ammo/3)+10+Int(Rnd(5))+(grenade*3)
+        strikes=0
+        f=-1
+        For l=0 To 10
+            If objects(l)\here=0 Then f=l:Pop For:Goto gotag
+        Next
+gotag
+        If f>-1
+            objects(f)\here=1
+            objects(f)\x=Int(Rnd(300))
+            objects(f)\y=0
+            objects(f)\vx=0
+            objects(f)\vy=2
+            objects(f)\dir=0    ;no anim!!
+            ty=0
+            If ammo<50  AND Rnd>.3 Then ty=0:Goto qwer
+            If Rnd>.94 Then ty=1:Goto qwer
+            If grenade=0 AND Rnd>.6 Then ty=1
+qwer:
+            objects(f)\typ=ammunition+ty
+            objects(f)\lo=ty+175
+            objects(f)\hi=ty+175
+            objects(f)\fr=ty+175
+            objects(f)\cnt=0
+            objects(f)\spd=10
+            objects(f)\time=0
+            objects(f)\hits=0
+        EndIf
+    EndIf
+EndIf
+
+
+;----------------------------------------------
+;update zombies..
+
+For l=0 To 10
+    If objects(l)\here=1
+        If objects(l)\typ=>ammunition Then Goto notzom
+
+        damper.q=QLimit((objects(l)\dam/objects(l)\hits)*6,0,5)
+        If damper=5
+            If objects(l)\fr=animhi(5,objects(l)\anim)
+                If objects(l)\cnt=>objects(l)\spd-1
+                    ss=Int(Rnd(3))+11
+                    Sound ss,8
+                    objects(l)\here=0
+                    zkilled+1
+                    Goto duz
+                EndIf
+            EndIf
+        EndIf
+
+        ani=objects(l)\anim
+
+        If objects(l)\hi<>animhi(damper,ani) OR objects(l)\lo<>animlo(damper,ani)
+            objects(l)\dir=animdir(damper,ani)
+            objects(l)\fr=animlo(damper,ani)
+            objects(l)\cnt=0
+        EndIf
+
+        objects(l)\hi=animhi(damper,ani)
+        objects(l)\lo=animlo(damper,ani)
+        objects(l)\ping=animping(damper,ani)
+        objects(l)\spd=animspd(damper,ani)
+
+        If objects(l)\typ=popup
+            objects(l)\time+1
+            If objects(l)\time=>150
+                objects(l)\here=0
+            EndIf
+        EndIf
+
+        If objects(l)\typ=walker
+            objects(l)\time+1
+            If objects(l)\x=>260    ;reached other side!!
+                objects(l)\here=0
+                If energy>0 Then energy=energy-.4
+                bloodfade{2}
+            EndIf
+        EndIf
+
+        If objects(l)\typ=thrower
+            invl.q=level
+            zsw.q=QLimit((1/(100-invl)),0.005,0.9)
+            If objects(l)\dam>0 Then objects(l)\dam=objects(l)\dam-zsw
+            If objects(l)\dam<0 Then objects(l)\dam=0
+            objects(l)\time+1
+            ddd=(50-level)
+            If objects(l)\time<ddd Then objects(l)\cnt=0
+            If objects(l)\time=11+ddd AND objects(l)\fr<4
+                For z=0 To 10
+                    If objects(z)\here=0
+                        objects(z)\here=1
+                        objects(z)\x=objects(l)\x+16
+                        objects(z)\y=objects(l)\y+14
+                        objects(z)\vx=0
+                        objects(z)\vy=.5
+                        objects(z)\fr=170
+                        objects(z)\hi=173
+                        objects(z)\lo=170
+                        objects(z)\cnt=0
+                        objects(z)\dir=1
+                        objects(z)\spd=6
+                        objects(z)\typ=bomb
+                        Pop For:Goto asd
+                    EndIf
+                Next
+asd:
+            EndIf
+
+            If objects(l)\time=14+ddd AND objects(l)\fr<4
+                objects(l)\here=0
+            EndIf
+        EndIf
+
+        Goto duz
+
+notzom:
+        If objects(l)\typ=ammunition
+            If objects(l)\hits=0
+                If objects(l)\y=>200-14
+                    objects(l)\y=200-14
+                    objects(l)\vy=0
+                    objects(l)\time+1
+                    If objects(l)\time>50 Then objects(l)\here=0
+                EndIf
+            Else
+                objects(l)\vy+.4
+                If objects(l)\x<0 OR objects(l)\x>303 OR objects(l)\y<0 OR objects(l)\y>180
+                    objects(l)\here=0
+                EndIf
+            EndIf
+
+        EndIf
+
+        If objects(l)\typ=grenades
+            If objects(l)\hits=0
+                If objects(l)\y=>200-14
+                    objects(l)\y=200-14
+                    objects(l)\vy=0
+                    objects(l)\time+1
+                    If objects(l)\time>50 Then objects(l)\here=0
+                EndIf
+            Else
+                objects(l)\vy+.4
+                If objects(l)\x<0 OR objects(l)\x>303 OR objects(l)\y<0 OR objects(l)\y>180
+                    objects(l)\here=0
+                EndIf
+            EndIf
+        EndIf
+
+        If objects(l)\typ=bomb
+            If objects(l)\fr=173 AND objects(l)\cnt=>3
+                objects(l)\here=0
+                bloodfade{3}
+                If energy>0 Then energy-1
+                If energy=0 Then Goto GAMEOVER
+            EndIf
+        EndIf
+
+duz:
+
+    EndIf
+Next
+
+;----------------------------------------------
+
+If Inkey$=" " Then BlitzKeys Off:bloodfade{5}:VWait 5:End
+
+If energy<=0 Then Goto GAMEOVER
+
+Goto FRAME
+
+;*********************************************************
+.FINISHLEVEL
+
+accuracy.q=Int((hit/fired)*100)  ;in percent
+
+UnQueue 0
+UnQueue 1
+
+VWait
+Show 1
+CopyBitMap 2,0
+VWait
+Show 0
+CopyBitMap 2,1
+
+VWait 25
+Use Palette 0
+Show 0,0,0
+BitMapOutput 0
+Use BitMap 0
+db=0
+pscore{score}
+
+Colour 1,0
+
+Boxf 80,40,240,120,0
+Box  80,40,240,120,1
+Use BlitzFont 0
+
+t$="LEVEL "+Str$(level)+" COMPLETE."
+Locate (40-Len(t$))/2,6
+Print t$
+
+t$="SHOTS FIRED: "+Str$(fired)+"."
+Locate (40-Len(t$))/2,8
+Print t$
+
+t$="HITS: "+Str$(hit)+"."
+Locate (40-Len(t$))/2,9
+Print t$
+
+t$="ACCURACY: "+Str$(accuracy)+"%"
+Locate (40-Len(t$))/2,11
+Print t$
+
+Locate 14,13
+Print "BONUS: "
+bonus.w=(accuracy*25)
+bonus=Int(bonus/10)*10
+Locate 21,13
+Print bonus," "
+
+CopyBitMap 0,1
+
+VWait 25
+
+For l=bonus To 0 Step -10
+    VWait
+    Show db
+    db=1-db
+    Use BitMap db
+    BitMapOutput db
+    UnQueue db,2
+    Use BlitzFont 0
+    score+10
+    bonus-10
+    pscore{score}
+    Locate 21,13
+    Print bonus," "
+;;;    If l/20=Int(l/20) Then Sound 19,1
+Next
+
+VWait 50
+
+level+1
+VWait
+Show 1
+CopyBitMap 2,0
+VWait
+Show 0
+CopyBitMap 2,1
+Goto STARTLEVEL
+
+;*********************************************************
+.GAMEOVER
+VWait
+
+Use BitMap 0
+Locate 15,12
+Print "GAME  OVER"
+Use BitMap 1
+Locate 15,12
+Print "GAME  OVER"
+
+VWait 40
+
+Use Palette 0
+melt{db}
+
+Goto FRONTEND
+
